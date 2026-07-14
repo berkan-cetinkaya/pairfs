@@ -9,6 +9,7 @@ import (
 	"github.com/berkan-cetinkaya/pairfs/internal/workspace"
 )
 
+// fixture creates an isolated workspace containing a representative Go source file.
 func fixture(t *testing.T) *workspace.Workspace {
 	t.Helper()
 	root := t.TempDir()
@@ -25,6 +26,7 @@ func fixture(t *testing.T) *workspace.Workspace {
 	return ws
 }
 
+// TestRead verifies that file output contains one-based line numbers.
 func TestRead(t *testing.T) {
 	ws := fixture(t)
 	out, err := ReadFile(ws, "internal/todo/model.go", 1, 10)
@@ -35,6 +37,8 @@ func TestRead(t *testing.T) {
 		t.Fatalf("unexpected: %s", out)
 	}
 }
+
+// TestGlob verifies recursive glob matching for Go source files.
 func TestGlob(t *testing.T) {
 	ws := fixture(t)
 	out, err := Glob(ws, "**/*.go")
@@ -45,6 +49,8 @@ func TestGlob(t *testing.T) {
 		t.Fatalf("got %v", out)
 	}
 }
+
+// TestGrep verifies regex matching, basename filtering, and reported line numbers.
 func TestGrep(t *testing.T) {
 	ws := fixture(t)
 	out, err := Grep(ws, "type Todo", "*.go", 10)
@@ -55,6 +61,8 @@ func TestGrep(t *testing.T) {
 		t.Fatalf("got %+v", out)
 	}
 }
+
+// TestEditPreviewAndApply verifies an edit preview and hash-guarded application.
 func TestEditPreviewAndApply(t *testing.T) {
 	ws := fixture(t)
 	p, _, _, err := PreviewEdit(ws, "internal/todo/model.go", "Title string", "Title string\n\tDone bool")
@@ -72,6 +80,8 @@ func TestEditPreviewAndApply(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+// TestWriteCreate verifies previewing and applying a new file creation.
 func TestWriteCreate(t *testing.T) {
 	ws := fixture(t)
 	p, _, err := PreviewWrite(ws, "internal/todo/store.go", "package todo\n", "create")
@@ -86,6 +96,8 @@ func TestWriteCreate(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+// TestDeleteMovesToTrash verifies that deletion preserves the file under pairfs trash.
 func TestDeleteMovesToTrash(t *testing.T) {
 	ws := fixture(t)
 	p, err := PreviewDelete(ws, "internal/todo/model.go")
@@ -103,6 +115,8 @@ func TestDeleteMovesToTrash(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestMove verifies previewing and applying a hash-guarded file rename.
 func TestMove(t *testing.T) {
 	ws := fixture(t)
 	p, err := PreviewMove(ws, "internal/todo/model.go", "internal/todo/entity.go")
@@ -117,6 +131,8 @@ func TestMove(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+// TestStaleHash verifies that an intervening file change prevents an edit.
 func TestStaleHash(t *testing.T) {
 	ws := fixture(t)
 	p, _, _, err := PreviewEdit(ws, "internal/todo/model.go", "Title string", "Name string")
@@ -135,6 +151,8 @@ func TestStaleHash(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+// TestUnsafePath verifies that parent-directory traversal is rejected.
 func TestUnsafePath(t *testing.T) {
 	ws := fixture(t)
 	if _, err := ReadFile(ws, "../secret", 1, 10); err == nil {

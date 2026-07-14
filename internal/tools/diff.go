@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// UnifiedDiff renders a deterministic whole-file unified diff for a single path.
 func UnifiedDiff(path, oldContent, newContent string) string {
 	oldLines := splitLines(oldContent)
 	newLines := splitLines(newContent)
@@ -41,6 +42,7 @@ func UnifiedDiff(path, oldContent, newContent string) string {
 	return b.String()
 }
 
+// splitLines normalizes CRLF endings and splits text without a trailing empty line.
 func splitLines(s string) []string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.TrimSuffix(s, "\n")

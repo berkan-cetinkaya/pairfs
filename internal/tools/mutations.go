@@ -15,6 +15,8 @@ var (
 	ErrAmbiguousMatch = errors.New("old text matched more than once")
 )
 
+// PreviewEdit prepares an exact, unique text replacement without modifying the file.
+// It returns the preview, resulting content, and original file mode for a later apply.
 func PreviewEdit(ws *workspace.Workspace, path, oldText, newText string) (Preview, string, os.FileMode, error) {
 	data, mode, err := ws.Read(path)
 	if err != nil {
@@ -33,6 +35,8 @@ func PreviewEdit(ws *workspace.Workspace, path, oldText, newText string) (Previe
 	return Preview{Operation: "edit", Path: path, Diff: UnifiedDiff(path, current, next), BeforeHash: hash, CanApply: true}, next, mode, nil
 }
 
+// ApplyEdit performs an exact, unique text replacement using an atomic file write.
+// When expectedHash is non-empty, a changed source returns a stale result without writing.
 func ApplyEdit(ws *workspace.Workspace, path, oldText, newText, expectedHash string) (Result, error) {
 	if expectedHash != "" {
 		h, err := ws.Hash(path)
@@ -53,6 +57,8 @@ func ApplyEdit(ws *workspace.Workspace, path, oldText, newText, expectedHash str
 	return Result{Status: "applied", Operation: "edit", Path: path}, nil
 }
 
+// PreviewWrite validates a create or overwrite operation without modifying the workspace.
+// It returns the mode that ApplyWrite should preserve or use for the destination.
 func PreviewWrite(ws *workspace.Workspace, path, content, mode string) (Preview, os.FileMode, error) {
 	full, err := ws.Resolve(path)
 	if err != nil {
@@ -80,6 +86,8 @@ func PreviewWrite(ws *workspace.Workspace, path, content, mode string) (Preview,
 	}
 }
 
+// ApplyWrite creates or atomically overwrites a workspace file after validating the operation.
+// For overwrite mode, a non-empty expectedHash detects changes made after preview.
 func ApplyWrite(ws *workspace.Workspace, path, content, mode, expectedHash string) (Result, error) {
 	if mode == "overwrite" && expectedHash != "" {
 		h, err := ws.Hash(path)
@@ -100,6 +108,7 @@ func ApplyWrite(ws *workspace.Workspace, path, content, mode, expectedHash strin
 	return Result{Status: "applied", Operation: "write", Path: path}, nil
 }
 
+// PreviewDelete returns the deletion diff and current hash without modifying the file.
 func PreviewDelete(ws *workspace.Workspace, path string) (Preview, error) {
 	data, _, err := ws.Read(path)
 	if err != nil {
@@ -109,6 +118,8 @@ func PreviewDelete(ws *workspace.Workspace, path string) (Preview, error) {
 	return Preview{Operation: "delete", Path: path, Diff: UnifiedDiff(path, string(data), ""), BeforeHash: hash, CanApply: true}, nil
 }
 
+// ApplyDelete moves a workspace file into .pairfs/trash instead of removing it permanently.
+// When expectedHash is non-empty, a changed source returns a stale result without moving it.
 func ApplyDelete(ws *workspace.Workspace, path, expectedHash string) (Result, error) {
 	if expectedHash != "" {
 		h, err := ws.Hash(path)
@@ -134,6 +145,7 @@ func ApplyDelete(ws *workspace.Workspace, path, expectedHash string) (Result, er
 	return Result{Status: "applied", Operation: "delete", Path: path, Message: "moved to .pairfs/trash"}, nil
 }
 
+// PreviewMove validates a file move and returns a rename preview without changing the workspace.
 func PreviewMove(ws *workspace.Workspace, from, to string) (Preview, error) {
 	data, _, err := ws.Read(from)
 	if err != nil {
@@ -151,6 +163,8 @@ func PreviewMove(ws *workspace.Workspace, from, to string) (Preview, error) {
 	return Preview{Operation: "move", From: from, To: to, Diff: diff, BeforeHash: hash, CanApply: true, Message: fmt.Sprintf("%d bytes", len(data))}, nil
 }
 
+// ApplyMove renames a workspace file after validating that the destination is available.
+// When expectedHash is non-empty, a changed source returns a stale result without moving it.
 func ApplyMove(ws *workspace.Workspace, from, to, expectedHash string) (Result, error) {
 	if expectedHash != "" {
 		h, err := ws.Hash(from)

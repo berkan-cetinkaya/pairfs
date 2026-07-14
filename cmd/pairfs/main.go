@@ -10,9 +10,13 @@ import (
 	"github.com/berkan-cetinkaya/pairfs/internal/workspace"
 )
 
-func fail(err error)  { fmt.Fprintln(os.Stderr, "error:", err); os.Exit(1) }
+// fail writes err to standard error and terminates the process with a failure status.
+func fail(err error) { fmt.Fprintln(os.Stderr, "error:", err); os.Exit(1) }
+
+// printJSON serializes v as indented JSON and writes it to standard output.
 func printJSON(v any) { b, _ := json.MarshalIndent(v, "", "  "); fmt.Println(string(b)) }
 
+// main parses the selected pairfs subcommand and dispatches it against a workspace.
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("usage: pairfs <read|grep|glob|edit|write|delete|move>")

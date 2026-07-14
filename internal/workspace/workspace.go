@@ -17,6 +17,7 @@ type Workspace struct {
 	root string
 }
 
+// New creates a Workspace rooted at an existing directory and stores its absolute path.
 func New(root string) (*Workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -32,8 +33,11 @@ func New(root string) (*Workspace, error) {
 	return &Workspace{root: abs}, nil
 }
 
+// Root returns the absolute path of the workspace root.
 func (w *Workspace) Root() string { return w.root }
 
+// Resolve validates a workspace-relative path and returns its absolute path.
+// It rejects empty, absolute, parent-escaping, and symlink-parent-escaping paths.
 func (w *Workspace) Resolve(rel string) (string, error) {
 	if rel == "" || filepath.IsAbs(rel) {
 		return "", ErrUnsafePath
@@ -60,6 +64,7 @@ func (w *Workspace) Resolve(rel string) (string, error) {
 	return full, nil
 }
 
+// Read returns the contents and mode of a regular file inside the workspace.
 func (w *Workspace) Read(rel string) ([]byte, fs.FileMode, error) {
 	full, err := w.Resolve(rel)
 	if err != nil {
@@ -76,6 +81,7 @@ func (w *Workspace) Read(rel string) ([]byte, fs.FileMode, error) {
 	return data, info.Mode(), err
 }
 
+// Hash returns the lowercase hexadecimal SHA-256 digest of a workspace file.
 func (w *Workspace) Hash(rel string) (string, error) {
 	data, _, err := w.Read(rel)
 	if err != nil {
@@ -85,6 +91,8 @@ func (w *Workspace) Hash(rel string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+// AtomicWrite replaces a workspace file by syncing and renaming a temporary sibling file.
+// A zero mode defaults to 0644, and missing parent directories are created with mode 0755.
 func (w *Workspace) AtomicWrite(rel string, data []byte, mode fs.FileMode) error {
 	full, err := w.Resolve(rel)
 	if err != nil {

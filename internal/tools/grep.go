@@ -17,6 +17,8 @@ type GrepMatch struct {
 	Text string `json:"text"`
 }
 
+// Grep searches workspace files for a regular expression and returns matches in walk order.
+// Include optionally filters file basenames, and non-positive max values default to 100.
 func Grep(ws *workspace.Workspace, pattern, include string, max int) ([]GrepMatch, error) {
 	rx, err := regexp.Compile(pattern)
 	if err != nil {

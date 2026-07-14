@@ -10,6 +10,8 @@ import (
 	"github.com/berkan-cetinkaya/pairfs/internal/workspace"
 )
 
+// Glob returns sorted workspace-relative file paths matching pattern.
+// The pattern uses slash-separated paths and supports ** for recursive matching.
 func Glob(ws *workspace.Workspace, pattern string) ([]string, error) {
 	rx := globToRegexp(filepath.ToSlash(pattern))
 	var files []string
@@ -34,6 +36,7 @@ func Glob(ws *workspace.Workspace, pattern string) ([]string, error) {
 	return files, err
 }
 
+// globToRegexp converts a slash-separated pairfs glob into an anchored regular expression.
 func globToRegexp(pattern string) *regexp.Regexp {
 	var b strings.Builder
 	b.WriteString("^")

@@ -8,6 +8,8 @@ import (
 	"github.com/berkan-cetinkaya/pairfs/internal/workspace"
 )
 
+// ReadFile returns a line-numbered slice of a workspace file.
+// Offset is one-based; invalid offsets and limits fall back to 1 and 200 respectively.
 func ReadFile(ws *workspace.Workspace, path string, offset, limit int) (string, error) {
 	data, _, err := ws.Read(path)
 	if err != nil {
