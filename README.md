@@ -14,6 +14,10 @@ A minimal, deterministic, LLM-agnostic local filesystem tool runtime written in 
 
 Mutation commands are preview-only by default. Add `--apply` to execute. Preview responses include `beforeHash`; pass it back with `--expected-hash` to prevent stale writes.
 
+## How it works
+
+See [Architecture and function guide](docs/ARCHITECTURE.md) for the end-to-end execution flow, mutation lifecycle, package responsibilities, and a complete function inventory.
+
 ## Build
 
 ```bash
