@@ -17,8 +17,9 @@ type GrepMatch struct {
 	Text string `json:"text"`
 }
 
-// Grep searches workspace files for a regular expression and returns matches in walk order.
-// Include optionally filters file basenames, and non-positive max values default to 100.
+// Grep searches non-symlink workspace files for a regular expression and returns matches in walk order.
+// Include optionally filters file basenames, non-positive max values default to 100, and discovery
+// excludes .git, .pairfs, and vendor directories.
 func Grep(ws *workspace.Workspace, pattern, include string, max int) ([]GrepMatch, error) {
 	rx, err := regexp.Compile(pattern)
 	if err != nil {
@@ -33,9 +34,12 @@ func Grep(ws *workspace.Workspace, pattern, include string, max int) ([]GrepMatc
 			return walkErr
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "vendor" {
+			if d.Name() == ".git" || d.Name() == ".pairfs" || d.Name() == "vendor" {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
 		rel, _ := filepath.Rel(ws.Root(), full)

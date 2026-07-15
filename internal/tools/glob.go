@@ -10,8 +10,9 @@ import (
 	"github.com/berkan-cetinkaya/pairfs/internal/workspace"
 )
 
-// Glob returns sorted workspace-relative file paths matching pattern.
-// The pattern uses slash-separated paths and supports ** for recursive matching.
+// Glob returns sorted non-symlink workspace-relative file paths matching pattern.
+// The pattern uses slash-separated paths, supports ** for recursive matching, and discovery excludes
+// .git, .pairfs, and vendor directories.
 func Glob(ws *workspace.Workspace, pattern string) ([]string, error) {
 	rx := globToRegexp(filepath.ToSlash(pattern))
 	var files []string
@@ -20,9 +21,12 @@ func Glob(ws *workspace.Workspace, pattern string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "vendor" {
+			if d.Name() == ".git" || d.Name() == ".pairfs" || d.Name() == "vendor" {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
 		rel, _ := filepath.Rel(ws.Root(), full)
