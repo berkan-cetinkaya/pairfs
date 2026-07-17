@@ -54,11 +54,11 @@ Unknown commands and missing subcommands terminate without touching the workspac
 
 ### Grep
 
-`grep` compiles the supplied regular expression, walks the workspace, optionally filters file basenames, and returns matching path/line/text records. `.git` and `vendor` directories are skipped during discovery.
+`grep` compiles the supplied regular expression, walks the workspace, optionally filters file basenames, and returns matching path/line/text records. `.git`, `.pairfs`, `vendor`, and symlink entries are skipped during discovery.
 
 ### Glob
 
-`glob` converts the pairfs glob syntax into an anchored regular expression, walks the workspace, collects matching file paths, and sorts them before returning JSON. `**` matches recursively, while `*` remains within one path segment.
+`glob` converts the pairfs glob syntax into an anchored regular expression, walks the workspace, collects matching file paths, and sorts them before returning JSON. `**` matches recursively, while `*` remains within one path segment. Symlink entries and `.git`, `.pairfs`, and `vendor` directories are excluded.
 
 ## Mutation lifecycle
 
@@ -97,7 +97,7 @@ Write has two modes. `create` requires the destination not to exist and uses mod
 
 ### Delete
 
-Delete is recoverable within the workspace. Preview renders the file as removed; apply renames it into `.pairfs/trash/<original-path>` instead of permanently deleting it.
+Delete is recoverable within the workspace. Preview renders the file as removed; apply renames it into `.pairfs/trash/<original-path>` instead of permanently deleting it. If that trash path already exists, apply fails and preserves both the source and the earlier recovery copy.
 
 ### Move
 
@@ -107,15 +107,17 @@ Move requires a readable source and a destination that does not exist. Preview r
 
 `Workspace` is the filesystem boundary used by tools:
 
-- The root must exist and be a directory.
+- The root must exist, be a directory, and is canonicalized once during construction.
 - Tool paths must be non-empty and workspace-relative.
 - Absolute paths and lexical `..` escapes are rejected.
-- Resolved parents are checked against the resolved workspace root.
+- Every existing component below the root is inspected with `Lstat`.
+- All descendant symlinks are rejected, even when they point back inside the workspace or are broken.
+- Missing nested paths are allowed so create and move operations can prepare normal destinations.
 - Reads accept regular files only.
 - Hashes are SHA-256 digests of file bytes.
-- Atomic writes use a temporary sibling file, `fsync`, close, and rename.
+- Atomic writes create parents, repeat path validation, then use a temporary sibling file, `fsync`, close, and rename.
 
-The first release preparation tracks additional symlink and race-condition hardening as separate security work. Callers should treat a workspace as trusted until that work is complete.
+These checks use portable Go APIs and prevent static symlink escapes. They do not provide descriptor-level isolation from another local process that maliciously replaces a checked component before it is used. OS-specific no-follow operations, hard-link policy, and mandatory mutation hashes remain separate hardening work.
 
 ## Output contracts
 
@@ -151,9 +153,9 @@ Read returns plain line-numbered text. Grep, glob, previews, and mutation result
 
 | Function | Responsibility | Input | Output or side effect |
 | --- | --- | --- | --- |
-| `New` | Constructs a workspace from an existing directory. | Root path | `*Workspace` with an absolute root, or an error. |
-| `(*Workspace).Root` | Exposes the workspace root. | Receiver | Absolute root string; no side effect. |
-| `(*Workspace).Resolve` | Validates and joins a workspace-relative path. | Relative path | Absolute target path or `ErrUnsafePath`. |
+| `New` | Constructs a workspace from an existing directory. | Root path | `*Workspace` with a canonical absolute root, or an error. |
+| `(*Workspace).Root` | Exposes the workspace root. | Receiver | Canonical absolute root string; no side effect. |
+| `(*Workspace).Resolve` | Validates syntax and rejects every existing descendant symlink. | Relative path | Absolute target path or `ErrUnsafePath`. |
 | `(*Workspace).Read` | Reads a regular workspace file. | Relative path | Bytes, file mode, or an error. |
 | `(*Workspace).Hash` | Hashes the current file bytes. | Relative path | Lowercase hexadecimal SHA-256 digest. |
 | `(*Workspace).AtomicWrite` | Writes through a synced temporary sibling and rename. | Relative path, bytes, mode | Creates parents and atomically replaces the destination. |
@@ -168,13 +170,13 @@ Read returns plain line-numbered text. Grep, glob, previews, and mutation result
 
 | Function | Responsibility | Input | Output or side effect |
 | --- | --- | --- | --- |
-| `Grep` | Searches file lines using a regular expression. | Workspace, regex, basename filter, maximum matches | Ordered `[]GrepMatch`; no filesystem mutation. |
+| `Grep` | Searches non-symlink, non-ignored file lines using a regular expression. | Workspace, regex, basename filter, maximum matches | Ordered `[]GrepMatch`; no filesystem mutation. |
 
 ### `internal/tools/glob.go`
 
 | Function | Responsibility | Input | Output or side effect |
 | --- | --- | --- | --- |
-| `Glob` | Finds and sorts files matching pairfs glob syntax. | Workspace and glob pattern | Sorted relative paths; no filesystem mutation. |
+| `Glob` | Finds and sorts non-symlink, non-ignored files matching pairfs glob syntax. | Workspace and glob pattern | Sorted relative paths; no filesystem mutation. |
 | `globToRegexp` | Compiles pairfs glob syntax into a path regex. | Slash-separated glob | Anchored `*regexp.Regexp`; no side effect. |
 
 ### `internal/tools/diff.go`
@@ -193,7 +195,7 @@ Read returns plain line-numbered text. Grep, glob, previews, and mutation result
 | `PreviewWrite` | Validates create/overwrite and builds its diff. | Workspace, path, content, mode | Preview and destination mode; no mutation. |
 | `ApplyWrite` | Creates or atomically overwrites a file. | Preview inputs plus optional expected hash | Applied/stale result; may write one file. |
 | `PreviewDelete` | Builds a deletion diff and captures the source hash. | Workspace and path | Preview; no mutation. |
-| `ApplyDelete` | Moves a file to pairfs trash. | Workspace, path, optional expected hash | Applied/stale result; may rename one file. |
+| `ApplyDelete` | Moves a file to pairfs trash without overwriting an earlier recovery copy. | Workspace, path, optional expected hash | Applied/stale result; may rename one file. |
 | `PreviewMove` | Validates source and destination and describes a rename. | Workspace, source path, destination path | Preview; no mutation. |
 | `ApplyMove` | Creates destination parents and renames the source. | Preview inputs plus optional expected hash | Applied/stale result; may rename one file. |
 

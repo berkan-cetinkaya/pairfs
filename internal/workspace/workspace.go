@@ -17,29 +17,34 @@ type Workspace struct {
 	root string
 }
 
-// New creates a Workspace rooted at an existing directory and stores its absolute path.
+// New creates a Workspace rooted at an existing directory and stores its canonical absolute path.
 func New(root string) (*Workspace, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve root: %w", err)
 	}
-	info, err := os.Stat(abs)
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return nil, fmt.Errorf("resolve root symlinks: %w", err)
+	}
+	info, err := os.Stat(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("stat root: %w", err)
 	}
 	if !info.IsDir() {
 		return nil, fmt.Errorf("root is not a directory")
 	}
-	return &Workspace{root: abs}, nil
+	return &Workspace{root: filepath.Clean(resolved)}, nil
 }
 
-// Root returns the absolute path of the workspace root.
+// Root returns the canonical absolute path of the workspace root.
 func (w *Workspace) Root() string { return w.root }
 
 // Resolve validates a workspace-relative path and returns its absolute path.
-// It rejects empty, absolute, parent-escaping, and symlink-parent-escaping paths.
+// It rejects empty, absolute, parent-escaping, and symlink-containing paths.
+// Missing path components are allowed so callers can safely prepare create operations.
 func (w *Workspace) Resolve(rel string) (string, error) {
-	if rel == "" || filepath.IsAbs(rel) {
+	if rel == "" || filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" {
 		return "", ErrUnsafePath
 	}
 	clean := filepath.Clean(rel)
@@ -47,19 +52,23 @@ func (w *Workspace) Resolve(rel string) (string, error) {
 		return "", ErrUnsafePath
 	}
 	full := filepath.Join(w.root, clean)
-	resolvedRoot, err := filepath.EvalSymlinks(w.root)
-	if err != nil {
-		return "", fmt.Errorf("resolve root symlinks: %w", err)
-	}
-
-	parent := filepath.Dir(full)
-	resolvedParent := parent
-	if p, err := filepath.EvalSymlinks(parent); err == nil {
-		resolvedParent = p
-	}
-	relToRoot, err := filepath.Rel(resolvedRoot, resolvedParent)
-	if err != nil || relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
-		return "", ErrUnsafePath
+	current := w.root
+	parts := strings.Split(clean, string(filepath.Separator))
+	for i, part := range parts {
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if errors.Is(err, fs.ErrNotExist) {
+			return full, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("inspect path component %q: %w", filepath.ToSlash(filepath.Join(parts[:i+1]...)), err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("%w: symlink component %q", ErrUnsafePath, filepath.ToSlash(filepath.Join(parts[:i+1]...)))
+		}
+		if i < len(parts)-1 && !info.IsDir() {
+			return "", fmt.Errorf("path component %q is not a directory", filepath.ToSlash(filepath.Join(parts[:i+1]...)))
+		}
 	}
 	return full, nil
 }
@@ -70,7 +79,7 @@ func (w *Workspace) Read(rel string) ([]byte, fs.FileMode, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	info, err := os.Stat(full)
+	info, err := os.Lstat(full)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -99,6 +108,10 @@ func (w *Workspace) AtomicWrite(rel string, data []byte, mode fs.FileMode) error
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
+	}
+	full, err = w.Resolve(rel)
+	if err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(full), ".pairfs-*")

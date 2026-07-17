@@ -64,7 +64,10 @@ func PreviewWrite(ws *workspace.Workspace, path, content, mode string) (Preview,
 	if err != nil {
 		return Preview{}, 0, err
 	}
-	_, statErr := os.Stat(full)
+	_, statErr := os.Lstat(full)
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return Preview{}, 0, statErr
+	}
 	switch mode {
 	case "create":
 		if statErr == nil {
@@ -120,6 +123,7 @@ func PreviewDelete(ws *workspace.Workspace, path string) (Preview, error) {
 
 // ApplyDelete moves a workspace file into .pairfs/trash instead of removing it permanently.
 // When expectedHash is non-empty, a changed source returns a stale result without moving it.
+// An existing trash target is preserved and causes the operation to fail.
 func ApplyDelete(ws *workspace.Workspace, path, expectedHash string) (Result, error) {
 	if expectedHash != "" {
 		h, err := ws.Hash(path)
@@ -134,11 +138,27 @@ func ApplyDelete(ws *workspace.Workspace, path, expectedHash string) (Result, er
 	if err != nil {
 		return Result{}, err
 	}
-	trash := filepath.Join(ws.Root(), ".pairfs", "trash", path)
+	trashRel := filepath.Join(".pairfs", "trash", filepath.Clean(path))
+	trash, err := ws.Resolve(trashRel)
+	if err != nil {
+		return Result{}, err
+	}
 	if err := os.MkdirAll(filepath.Dir(trash), 0o755); err != nil {
 		return Result{}, err
 	}
-	_ = os.Remove(trash)
+	full, err = ws.Resolve(path)
+	if err != nil {
+		return Result{}, err
+	}
+	trash, err = ws.Resolve(trashRel)
+	if err != nil {
+		return Result{}, err
+	}
+	if _, err := os.Lstat(trash); err == nil {
+		return Result{}, fmt.Errorf("trash target already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Result{}, err
+	}
 	if err := os.Rename(full, trash); err != nil {
 		return Result{}, err
 	}
@@ -155,8 +175,10 @@ func PreviewMove(ws *workspace.Workspace, from, to string) (Preview, error) {
 		return Preview{}, err
 	}
 	toFull, _ := ws.Resolve(to)
-	if _, err := os.Stat(toFull); err == nil {
+	if _, err := os.Lstat(toFull); err == nil {
 		return Preview{}, fmt.Errorf("target already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Preview{}, err
 	}
 	hash, _ := ws.Hash(from)
 	diff := fmt.Sprintf("rename from %s\nrename to %s\n", from, to)
@@ -182,6 +204,14 @@ func ApplyMove(ws *workspace.Workspace, from, to, expectedHash string) (Result, 
 	fromFull, _ := ws.Resolve(from)
 	toFull, _ := ws.Resolve(to)
 	if err := os.MkdirAll(filepath.Dir(toFull), 0o755); err != nil {
+		return Result{}, err
+	}
+	fromFull, err = ws.Resolve(from)
+	if err != nil {
+		return Result{}, err
+	}
+	toFull, err = ws.Resolve(to)
+	if err != nil {
 		return Result{}, err
 	}
 	if err := os.Rename(fromFull, toFull); err != nil {

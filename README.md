@@ -76,12 +76,16 @@ go test ./...
 
 - workspace-relative paths only
 - blocks `../` path escapes and absolute paths
-- blocks symlink-parent escapes
+- canonicalizes the workspace root once at startup
+- rejects every symlink below the workspace root, including broken and final-component symlinks
 - mutation preview before apply
 - optional SHA-256 stale check
 - atomic writes
 - delete moves files to `.pairfs/trash`
-- ignores `.git` and `vendor` during discovery
+- preserves existing trash entries instead of overwriting them
+- ignores `.git`, `.pairfs`, `vendor`, and symlink entries during discovery
+
+Path checks use portable Go filesystem operations. They prevent static symlink escapes, but do not claim descriptor-level isolation against another local process that changes path components between validation and use.
 
 ## Current MVP limitations
 
@@ -91,3 +95,4 @@ go test ./...
 - no fuzzy matching
 - no arbitrary shell execution
 - move does not edit file content
+- no OS-specific protection against malicious concurrent path replacement
