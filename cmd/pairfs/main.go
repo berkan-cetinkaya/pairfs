@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/berkan-cetinkaya/pairfs/internal/tools"
-	"github.com/berkan-cetinkaya/pairfs/internal/workspace"
+	"github.com/berkan-cetinkaya/pairfs"
 )
 
 // fail writes err to standard error and terminates the process with a failure status.
@@ -39,39 +38,39 @@ func main() {
 	apply := fs.Bool("apply", false, "apply mutation; default is preview")
 	hash := fs.String("expected-hash", "", "expected pre-apply sha256")
 	_ = fs.Parse(os.Args[2:])
-	ws, err := workspace.New(*root)
+	workspace, err := pairfs.Open(*root)
 	if err != nil {
 		fail(err)
 	}
 
 	switch cmd {
 	case "read":
-		out, err := tools.ReadFile(ws, *path, *offset, *limit)
+		out, err := workspace.Read(*path, *offset, *limit)
 		if err != nil {
 			fail(err)
 		}
 		fmt.Print(out)
 	case "grep":
-		out, err := tools.Grep(ws, *pattern, *include, *limit)
+		out, err := workspace.Grep(*pattern, *include, *limit)
 		if err != nil {
 			fail(err)
 		}
 		printJSON(out)
 	case "glob":
-		out, err := tools.Glob(ws, *pattern)
+		out, err := workspace.Glob(*pattern)
 		if err != nil {
 			fail(err)
 		}
 		printJSON(out)
 	case "edit":
 		if *apply {
-			r, err := tools.ApplyEdit(ws, *path, *oldText, *newText, *hash)
+			r, err := workspace.ApplyEdit(*path, *oldText, *newText, *hash)
 			if err != nil {
 				fail(err)
 			}
 			printJSON(r)
 		} else {
-			p, _, _, err := tools.PreviewEdit(ws, *path, *oldText, *newText)
+			p, err := workspace.PreviewEdit(*path, *oldText, *newText)
 			if err != nil {
 				fail(err)
 			}
@@ -79,13 +78,13 @@ func main() {
 		}
 	case "write":
 		if *apply {
-			r, err := tools.ApplyWrite(ws, *path, *content, *mode, *hash)
+			r, err := workspace.ApplyWrite(*path, *content, pairfs.WriteMode(*mode), *hash)
 			if err != nil {
 				fail(err)
 			}
 			printJSON(r)
 		} else {
-			p, _, err := tools.PreviewWrite(ws, *path, *content, *mode)
+			p, err := workspace.PreviewWrite(*path, *content, pairfs.WriteMode(*mode))
 			if err != nil {
 				fail(err)
 			}
@@ -93,13 +92,13 @@ func main() {
 		}
 	case "delete":
 		if *apply {
-			r, err := tools.ApplyDelete(ws, *path, *hash)
+			r, err := workspace.ApplyDelete(*path, *hash)
 			if err != nil {
 				fail(err)
 			}
 			printJSON(r)
 		} else {
-			p, err := tools.PreviewDelete(ws, *path)
+			p, err := workspace.PreviewDelete(*path)
 			if err != nil {
 				fail(err)
 			}
@@ -107,13 +106,13 @@ func main() {
 		}
 	case "move":
 		if *apply {
-			r, err := tools.ApplyMove(ws, *from, *to, *hash)
+			r, err := workspace.ApplyMove(*from, *to, *hash)
 			if err != nil {
 				fail(err)
 			}
 			printJSON(r)
 		} else {
-			p, err := tools.PreviewMove(ws, *from, *to)
+			p, err := workspace.PreviewMove(*from, *to)
 			if err != nil {
 				fail(err)
 			}
